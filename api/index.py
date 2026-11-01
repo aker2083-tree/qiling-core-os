@@ -1,5 +1,7 @@
 """Senju's first read-only tool: inspect its own public GitHub repository."""
 import json
+import os
+import hmac
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from urllib.request import Request, urlopen
@@ -32,6 +34,26 @@ def inspect_repository():
         "memory_write": "not_implemented",
     }
 
+def run_allowlisted_task(task_id):
+    if task_id != "SENJU-001":
+        raise ValueError("task_not_allowlisted")
+    observation = inspect_repository()
+    evaluation = {
+        "success": True,
+        "evidence": "github_public_api_response",
+        "requires_human_review": True,
+    }
+    return {
+        "agent": "senju",
+        "task_id": task_id,
+        "state": "completed",
+        "plan": ["read_public_repository", "read_open_pull_requests", "read_recent_commits", "evaluate_observation"],
+        "observation": observation,
+        "evaluation": evaluation,
+        "reflection": "Read-only execution verified; no autonomous memory write or external side effect.",
+        "memory_write": "not_connected",
+    }
+
 class handler(BaseHTTPRequestHandler):
     def respond(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -47,11 +69,41 @@ class handler(BaseHTTPRequestHandler):
         if path in ("/api", "/api/index.py", "/api/health"):
             return self.respond(200, {"service":"senju-v0.1", "status":"ready", "capability":"github_readonly", "memory":"not_connected"})
         if path == "/api/project-status":
+            if not self.authorized():
+                return self.respond(401, {"error":"unauthorized"})
             try:
                 return self.respond(200, inspect_repository())
             except (HTTPError, URLError, TimeoutError, ValueError, KeyError) as exc:
                 return self.respond(502, {"error":"github_unavailable", "type":type(exc).__name__})
         return self.respond(404, {"error":"not_found"})
 
+    def authorized(self):
+        secret = os.environ.get("SENJU_READ_TOKEN")
+        if not secret:
+            return False  # fail closed until configured in Vercel
+        supplied = self.headers.get("Authorization", "")
+        return hmac.compare_digest(supplied, "Bearer " + secret)
+
     def do_POST(self):
-        return self.respond(501, {"error":"task_execution_not_enabled", "message":"Only allowlisted read-only GET is available."})
+        path = self.path.split("?", 1)[0].rstrip("/")
+        if path != "/api/tasks/run":
+            return self.respond(404, {"error":"not_found"})
+        if not self.authorized():
+            return self.respond(401, {"error":"unauthorized"})
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return self.respond(400, {"error":"invalid_length"})
+        if size <= 0 or size > 2048:
+            return self.respond(413, {"error":"invalid_body_size"})
+        try:
+            payload = json.loads(self.rfile.read(size))
+            if not isinstance(payload, dict) or set(payload) != {"task_id"}:
+                return self.respond(400, {"error":"invalid_task"})
+            if payload["task_id"] != "SENJU-001":
+                return self.respond(403, {"error":"task_not_allowlisted"})
+            return self.respond(200, run_allowlisted_task(payload["task_id"]))
+        except (ValueError, UnicodeDecodeError):
+            return self.respond(400, {"error":"invalid_json"})
+        except (HTTPError, URLError, TimeoutError, KeyError) as exc:
+            return self.respond(502, {"error":"github_unavailable", "type":type(exc).__name__})
