@@ -70,11 +70,11 @@ class FuzangStore:
             raise ValueError("invalid revision")
         new_id, now = str(uuid4()), utc_now()
         with self.db:
+            self.db.execute("INSERT INTO memories(id,kind,agent,content,source,created_at,revision) VALUES(?,?,?,?,?,?,?)",
+                            (new_id,old["kind"],old["agent"],new_content,source,now,old["revision"]+1))
             updated = self.db.execute("UPDATE memories SET superseded_by=? WHERE id=? AND superseded_by IS NULL", (new_id,mid))
             if updated.rowcount != 1:
                 raise ValueError("concurrent revision")
-            self.db.execute("INSERT INTO memories(id,kind,agent,content,source,created_at,revision) VALUES(?,?,?,?,?,?,?)",
-                            (new_id,old["kind"],old["agent"],new_content,source,now,old["revision"]+1))
             self.db.execute("INSERT INTO memory_events(memory_id,action,actor,timestamp,details) VALUES(?,?,?,?,?)",
                             (mid,"superseded",actor,now,json.dumps({"new_id":new_id})))
             self.db.execute("INSERT INTO memory_events(memory_id,action,actor,timestamp,details) VALUES(?,?,?,?,?)",
