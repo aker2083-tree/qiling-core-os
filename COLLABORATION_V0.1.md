@@ -17,3 +17,7 @@ Example task record:
 ```json
 {"id":"T-001","title":"Test memory persistence","assignee":"yingrufeng","status":"todo","history":[]}
 ```
+
+## BRIDGE-001 communication protocol
+
+See [docs/BRIDGE_PROTOCOL_V0.1.md](docs/BRIDGE_PROTOCOL_V0.1.md) for message envelope, four-layer duplicate handling, concurrency limitations, and owner approval gates. This document is a design contract, **not** a running bridge.
