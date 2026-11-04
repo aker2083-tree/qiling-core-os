@@ -1,0 +1,1 @@
+{"version":2,"rewrites":[{"source":"/api/health","destination":"/api/index.py"},{"source":"/api/project-status","destination":"/api/index.py"}]}

@@ -1,0 +1,16 @@
+version: "0.1"
+agents:
+  wuxianqin:
+    display_name: "無弦琴"
+    provider: "openai"
+    responsibilities: ["architecture", "review"]
+    memory_namespace: "agents/wuxianqin"
+  yingrufeng:
+    display_name: "影如風"
+    provider: "xai"
+    responsibilities: ["implementation", "testing"]
+    memory_namespace: "agents/yingrufeng"
+shared:
+  task_board: "task_board.json"
+  approval_required_for: ["merge", "deployment", "financial_actions", "shell_execution", "secrets"]
+  note: "Agent labels are attribution metadata, not authentication or permission grants."
