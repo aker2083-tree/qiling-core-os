@@ -85,6 +85,10 @@ class Journal:
                             event["prev_hash"] != previous or digest(event) != h):
                         raise IntegrityError("broken event chain")
                     event["event_hash"] = h
+                    if (not isinstance(event.get("command"), dict) or
+                            not isinstance(event.get("command_hash"), str) or
+                            event["command_hash"] != digest(event["command"])):
+                        raise IntegrityError("command hash mismatch")
                     key = event["command"]["idempotency_key"]
                     if key in keys:
                         raise IntegrityError("duplicate idempotency key")
