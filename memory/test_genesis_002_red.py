@@ -21,7 +21,7 @@ class Genesis002Red(unittest.TestCase):
             original = json.loads(manifest_path.read_bytes())
             replacement = dict(original, journal_id=str(uuid.uuid4()))
             self.assertNotEqual(original["journal_id"], replacement["journal_id"])
-            manifest_path.write_bytes(canonical(replacement) + b"\\n")
+            manifest_path.write_bytes(canonical(replacement) + b"\n")
             # Replacing the manifest with a valid but unrelated identity must
             # not silently reinterpret existing committed events.
             with self.assertRaises(IntegrityError):
