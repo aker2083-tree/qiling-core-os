@@ -26,8 +26,11 @@ jobs:
       - name: Capture RED evidence
         id: red
         run: |
+          set +e
           python scripts/run_genesis_002_red_evidence.py
-          cp "/tmp/genesis_002_red_evidence_$(git rev-parse HEAD).json" "$RUNNER_TEMP/genesis_002_red_evidence.json"
+          status=$?
+          cp "/tmp/genesis_002_red_evidence_$(git rev-parse HEAD).json" "$RUNNER_TEMP/genesis_002_red_evidence.json" 2>/dev/null || true
+          exit "$status"
       - name: Upload RED evidence (when produced)
         if: always()
         uses: actions/upload-artifact@v4
