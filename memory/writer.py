@@ -43,7 +43,7 @@ class Journal:
         # Must run under the exclusive writer lock.
         if self.manifest.exists() or self.log.exists():
             return
-        marker = {"schema_version": 1, "journal_id": str(uuid.uuid4())}
+        marker = {"schema_version": 2, "journal_id": str(uuid.uuid4())}
         with self.manifest.open("xb") as stream:
             stream.write(canonical(marker) + b"\n")
             stream.flush()
@@ -66,12 +66,14 @@ class Journal:
             raw = self.manifest.read_bytes()
             marker = json.loads(raw)
             if (canonical(marker) + b"\n" != raw or
-                    marker.get("schema_version") != 1 or
+                    type(marker.get("schema_version")) is not int or\n                    marker["schema_version"] not in (1, 2) or\n                    set(marker) != {"schema_version", "journal_id"} or
                     not isinstance(marker.get("journal_id"), str) or
                     not marker["journal_id"]):
                 raise IntegrityError("invalid manifest")
         except (ValueError, TypeError, UnicodeError, AttributeError) as exc:
             raise IntegrityError("invalid manifest") from exc
+        schema = marker["schema_version"]
+        journal_id = marker["journal_id"]
         with self.log.open("rb") as stream:
             for line in stream:
                 if not line.endswith(b"\n"):
@@ -80,7 +82,7 @@ class Journal:
                     event = json.loads(line)
                     if canonical(event) + b"\n" != line:
                         raise IntegrityError("noncanonical event")
-                    h = event.pop("event_hash")
+                    h = event.pop("event_hash")\n                    if schema == 2 and event.get("journal_id") != journal_id:\n                        raise IntegrityError("journal identity mismatch")\n                    if schema == 1 and "journal_id" in event:\n                        raise IntegrityError("unexpected v1 journal identity")
                     if (event["seq"] != len(events) + 1 or
                             event["prev_hash"] != previous or digest(event) != h):
                         raise IntegrityError("broken event chain")
@@ -112,9 +114,9 @@ class Journal:
                 if existing["command_hash"] != command_hash:
                     raise IdempotencyConflict(idempotency_key)
                 return {"status": "already_committed", "event": existing}
-            event = dict(seq=len(events) + 1, prev_hash=previous,
+            marker = json.loads(self.manifest.read_bytes())\n            event = dict(seq=len(events) + 1, prev_hash=previous,
                          command=command, command_hash=command_hash)
-            event["event_hash"] = digest(event)
+            if marker["schema_version"] == 2:\n                event["journal_id"] = marker["journal_id"]\n            event["event_hash"] = digest(event)
             with self.log.open("ab") as stream:
                 stream.write(canonical(event) + b"\n")
                 stream.flush()
