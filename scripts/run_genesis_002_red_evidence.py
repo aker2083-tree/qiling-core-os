@@ -55,11 +55,21 @@ def main():
         "tests": results,
         "interpretation": "RED evidence only; failing tests are expected before v2 implementation",
     }
-    target = ROOT / "genesis_002_red_evidence.json"
+    # Write outside the checkout so repeated runs do not dirty the working tree.
+    import tempfile
+    target = Path(tempfile.gettempdir()) / f"genesis_002_red_evidence_{report['commit_sha']}.json"
     target.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"Saved {target.name} for commit {report['commit_sha']}")
+    print(f"Saved {target} for commit {report['commit_sha']}")
     for item in results:
         print(f"{item['test']}: exit={item['exit_code']}")
+    # RED acceptance: each test must fail for the expected assertion, not for import/runtime errors.
+    valid_red = all(item["exit_code"] != 0 and
+                    "AssertionError: IntegrityError not raised" in item["stderr"]
+                    for item in results)
+    if not valid_red:
+        print("RED NOT VERIFIED: inspect evidence for unexpected pass or execution error", file=sys.stderr)
+        return 1
+    print("RED VERIFIED: both expected assertions failed (not GREEN)")
     return 0
 
 
