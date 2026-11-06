@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 5
     env:
       # Keep py_compile and unittest bytecode outside checkout: collector requires a clean tree.
-      PYTHONPYCACHEPREFIX: ${{ runner.temp }}/genesis-002-pycache
+      PYTHONPYCACHEPREFIX: /tmp/genesis-002-pycache
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v4
