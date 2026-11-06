@@ -8,6 +8,7 @@ on:
       - ".github/workflows/genesis-002-red.yml"
       - "memory/**"
       - "scripts/run_genesis_002_red_evidence.py"
+      - "tests/test_init_crash_window.py"
 
 permissions:
   contents: read
@@ -26,6 +27,18 @@ jobs:
           persist-credentials: false
       - name: Python syntax check
         run: python -m py_compile scripts/run_genesis_002_red_evidence.py memory/writer.py memory/test_genesis_002_red.py memory/test_genesis_002_cross_journal_red.py
+      - name: Run initialization crash-window regression
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests -p 'test_init_crash_window.py' -v 2>&1 | tee "$RUNNER_TEMP/init_crash_window_test.log"
+      - name: Upload crash-window test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-002-init-crash-window-test
+          path: ${{ runner.temp }}/init_crash_window_test.log
+          if-no-files-found: warn
+          retention-days: 14
       - name: Capture RED evidence
         id: red
         run: |
