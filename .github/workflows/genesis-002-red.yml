@@ -1,0 +1,38 @@
+name: GENESIS-002 isolated RED evidence
+
+on:
+  push:
+    branches:
+      - feature/senju-genesis-002-cross-journal-red
+    paths:
+      - ".github/workflows/genesis-002-red.yml"
+      - "memory/**"
+      - "scripts/run_genesis_002_red_evidence.py"
+
+permissions:
+  contents: read
+
+jobs:
+  red-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python syntax check
+        run: python -m py_compile scripts/run_genesis_002_red_evidence.py memory/writer.py memory/test_genesis_002_red.py memory/test_genesis_002_cross_journal_red.py
+      - name: Capture RED evidence
+        id: red
+        run: |
+          python scripts/run_genesis_002_red_evidence.py
+          cp "/tmp/genesis_002_red_evidence_$(git rev-parse HEAD).json" "$RUNNER_TEMP/genesis_002_red_evidence.json"
+      - name: Upload RED evidence (when produced)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-002-red-evidence
+          path: ${{ runner.temp }}/genesis_002_red_evidence.json
+          if-no-files-found: warn
+          retention-days: 14
