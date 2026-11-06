@@ -63,7 +63,13 @@ def main():
     for item in results:
         print(f"{item['test']}: exit={item['exit_code']}")
     # RED acceptance: each test must fail for the expected assertion, not for import/runtime errors.
-    valid_red = all(\n        item["exit_code"] == 1\n        and "FAILED (failures=1)" in item["stderr"]\n        and "AssertionError: IntegrityError not raised" in item["stderr"]\n        and "ERROR:" not in item["stderr"]\n        and "Ran 1 test in " in item["stderr"]\n        for item in results\n    )
+    valid_red = all(
+        item["exit_code"] == 1\n        and "FAILED (failures=1)" in item["stderr"]
+        and "AssertionError: IntegrityError not raised" in item["stderr"]
+        and "ERROR:" not in item["stderr"]
+        and "Ran 1 test in " in item["stderr"]
+        for item in results
+    )
     if not valid_red:
         print("RED NOT VERIFIED: inspect evidence for unexpected pass or execution error", file=sys.stderr)
         return 1
