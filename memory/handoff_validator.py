@@ -1,8 +1,19 @@
 """Read-only, fail-closed handoff graph projection. No identity or authority is inferred."""
 def validate_handoff(events):
     accepted, quarantined, seen = [], [], {}
-    for event in events:
-        cmd = event.get("command") or {}
+    for source_index, event in enumerate(events):
+        if not isinstance(event, dict):
+            quarantined.append({"source_index": source_index, "reason": "invalid_event",
+                                "verified": False, "authority": None})
+            continue
+        cmd = event.get("command")
+        if not isinstance(cmd, dict):
+            quarantined.append({"source_index": source_index,
+                                "source_seq": event.get("seq"),
+                                "source_hash": event.get("event_hash"),
+                                "reason": "invalid_command",
+                                "verified": False, "authority": None})
+            continue
         if cmd.get("kind") not in ("proposal", "review", "decision_proposed"):
             continue
         payload = cmd.get("payload")
@@ -33,7 +44,7 @@ def validate_handoff(events):
                   "actor_claim": cmd.get("actor_claim"), "verified": False,
                   "authority": None}
         if reason:
-            quarantined.append({**record, "reason": reason})
+            quarantined.append({**record, "source_index": source_index, "reason": reason})
         else:
             accepted.append(record)
     return {"accepted": accepted, "quarantined": quarantined,
