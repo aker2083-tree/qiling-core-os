@@ -155,3 +155,64 @@ class Journal:
         with self.lock.open("a+b") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_SH)
             return self._load()[0]
+
+    def summarize_for_agents(self):
+        """Project shared state for dual-agent bootstrap (SENJU-CORE-DIRECTIVE-001).
+
+        Returns a deterministic summary from the event log only.
+        Platform memory is not consulted. actor_claim is recorded, not trusted.
+        """
+        events = self.recover()
+        open_tasks = {}
+        decisions = []
+        blocked = []
+        evidence_refs = []
+        journal_id = None
+        if self.manifest.exists():
+            journal_id = json.loads(self.manifest.read_bytes()).get("journal_id")
+
+        for event in events:
+            cmd = event.get("command") or {}
+            kind = cmd.get("kind")
+            payload = cmd.get("payload") or {}
+            ref = cmd.get("source_ref") or ""
+            if kind == "task_opened":
+                tid = payload.get("task_id") or cmd.get("idempotency_key")
+                open_tasks[tid] = {
+                    "task_id": tid,
+                    "goal": payload.get("goal"),
+                    "status": payload.get("status", "open"),
+                    "risk_level": payload.get("risk_level", "low"),
+                    "acceptance": payload.get("acceptance"),
+                }
+            elif kind == "task_updated":
+                tid = payload.get("task_id")
+                if tid in open_tasks:
+                    if "status" in payload:
+                        open_tasks[tid]["status"] = payload["status"]
+                    if payload.get("status") == "blocked":
+                        blocked.append({"task_id": tid, "reason": payload.get("reason")})
+            elif kind == "task_closed":
+                tid = payload.get("task_id")
+                open_tasks.pop(tid, None)
+                if payload.get("result_reference"):
+                    evidence_refs.append(payload["result_reference"])
+            elif kind == "decision_confirmed":
+                decisions.append({
+                    "decision_id": payload.get("decision_id") or cmd.get("idempotency_key"),
+                    "summary": payload.get("summary"),
+                    "source_ref": ref,
+                })
+            elif kind == "observation":
+                if payload.get("result_reference"):
+                    evidence_refs.append(payload["result_reference"])
+
+        open_list = [t for t in open_tasks.values() if t.get("status") != "done"]
+        return {
+            "journal_id": journal_id,
+            "open_tasks": open_list,
+            "last_decisions": decisions[-5:],
+            "blocked": blocked,
+            "evidence_refs": evidence_refs[-10:],
+            "event_count": len(events),
+        }
