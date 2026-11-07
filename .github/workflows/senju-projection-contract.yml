@@ -1,0 +1,26 @@
+name: SENJU projection recovery regression
+on:
+  push:
+    branches:
+      - feature/senju-projection-red-20261107
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  projection-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run projection, recovery and journal identity tests
+        run: |
+          python -m unittest \
+            memory.test_projection_recovery_contract \
+            memory.test_summarize_for_agents \
+            memory.test_genesis_002_red \
+            memory.test_journal_identity_contract -v
