@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "name": "senju_memory",
+  "description": "千手秘外部伏藏：可逃逸沙盒、供雙器靈恢復與反饋",
+  "layout": {
+    "manifest": "manifest.json",
+    "events": "events.jsonl",
+    "lock": ".writer.lock",
+    "snapshot": "snapshot.json",
+    "projections_dir": "projections/"
+  },
+  "layers": ["identity", "event_log", "projection", "knowledge", "reflection"],
+  "event_kinds": [
+    "genesis",
+    "identity_ref",
+    "task_opened",
+    "task_updated",
+    "task_closed",
+    "observation",
+    "decision_proposed",
+    "decision_confirmed",
+    "review_requested",
+    "review_result",
+    "note"
+  ],
+  "trust_rules": {
+    "actor_claim_is_authentication": false,
+    "source_ref_is_authentication": false,
+    "platform_memory_is_source_of_truth": false,
+    "append_only_event_log_is_write_path": true,
+    "snapshot_is_discardable_cache": true,
+    "secrets_forbidden_in_store": true
+  },
+  "agent_bootstrap_summary_fields": [
+    "journal_id",
+    "open_tasks",
+    "last_decisions",
+    "blocked",
+    "next_suggested",
+    "evidence_refs"
+  ]
+}
