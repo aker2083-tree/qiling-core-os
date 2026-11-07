@@ -45,8 +45,7 @@ class Journal:
             return
         marker = {"schema_version": 2, "journal_id": str(uuid.uuid4())}
         with self.manifest.open("xb") as stream:
-            stream.write(canonical(marker) + b"
-")
+            stream.write(canonical(marker) + b"\n")
             stream.flush()
             os.fsync(stream.fileno())
         self._fsync_directory()
@@ -66,8 +65,7 @@ class Journal:
         try:
             raw = self.manifest.read_bytes()
             marker = json.loads(raw)
-            if (canonical(marker) + b"
-" != raw or
+            if (canonical(marker) + b"\n" != raw or
                     type(marker.get("schema_version")) is not int or
                     marker["schema_version"] not in (1, 2) or
                     set(marker) != {"schema_version", "journal_id"} or
@@ -80,13 +78,11 @@ class Journal:
         journal_id = marker["journal_id"]
         with self.log.open("rb") as stream:
             for line in stream:
-                if not line.endswith(b"
-"):
+                if not line.endswith(b"\n"):
                     raise IntegrityError("partial event line")
                 try:
                     event = json.loads(line)
-                    if canonical(event) + b"
-" != line:
+                    if canonical(event) + b"\n" != line:
                         raise IntegrityError("noncanonical event")
                     h = event.pop("event_hash")
                     if schema == 2 and event.get("journal_id") != journal_id:
@@ -131,8 +127,7 @@ class Journal:
                 event["journal_id"] = marker["journal_id"]
             event["event_hash"] = digest(event)
             with self.log.open("ab") as stream:
-                stream.write(canonical(event) + b"
-")
+                stream.write(canonical(event) + b"\n")
                 stream.flush()
                 os.fsync(stream.fileno())
             return {"status": "committed", "event": event}
