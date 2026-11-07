@@ -1,0 +1,41 @@
+name: GENESIS-002 isolated GREEN verification
+
+on:
+  push:
+    branches:
+      - feature/senju-genesis-002-cross-journal-red
+    paths:
+      - ".github/workflows/genesis-002-green.yml"
+      - "memory/**"
+      - "tests/test_init_crash_window.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  green-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PYTHONPYCACHEPREFIX: /tmp/genesis-002-green-pycache
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile Python modules
+        run: python -m py_compile memory/writer.py memory/test_genesis_002_red.py memory/test_genesis_002_cross_journal_red.py tests/test_init_crash_window.py
+      - name: Verify identity-binding and initialization recovery
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest -v memory.test_genesis_002_red memory.test_genesis_002_cross_journal_red tests.test_init_crash_window 2>&1 | tee "$RUNNER_TEMP/genesis-002-green-tests.log"
+      - name: Upload independent GREEN test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-002-green-tests
+          path: ${{ runner.temp }}/genesis-002-green-tests.log
+          if-no-files-found: error
+          retention-days: 14
