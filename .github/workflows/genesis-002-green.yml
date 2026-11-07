@@ -25,12 +25,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Compile Python modules
-        run: python -m py_compile memory/writer.py memory/test_genesis_002_red.py memory/test_genesis_002_cross_journal_red.py tests/test_init_crash_window.py
+        run: python -m py_compile memory/writer.py memory/test_genesis_002_red.py memory/test_genesis_002_cross_journal_red.py tests/test_init_crash_window.py memory/test_genesis_002_regression.py
       - name: Verify identity-binding and initialization recovery
         shell: bash
         run: |
           set -o pipefail
-          python -m unittest -v memory.test_genesis_002_red memory.test_genesis_002_cross_journal_red tests.test_init_crash_window 2>&1 | tee "$RUNNER_TEMP/genesis-002-green-tests.log"
+          python -m unittest -v memory.test_genesis_002_red memory.test_genesis_002_cross_journal_red memory.test_genesis_002_regression tests.test_init_crash_window 2>&1 | tee "$RUNNER_TEMP/genesis-002-green-tests.log"
       - name: Upload independent GREEN test evidence
         if: always()
         uses: actions/upload-artifact@v4
