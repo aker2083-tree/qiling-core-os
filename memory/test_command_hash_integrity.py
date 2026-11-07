@@ -17,11 +17,12 @@ class CommandHashIntegrityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             Journal(directory).append("k", "open", {"task": "A"})
             path = Path(directory) / "events.jsonl"
-            event = json.loads(path.read_bytes())
+            lines = path.read_bytes().splitlines(keepends=True)
+            event = json.loads(lines[-1])
             event["command"]["payload"] = {"task": "B"}
             event.pop("event_hash")
             event["event_hash"] = digest(event)
-            path.write_bytes(canonical(event) + b"\n")
+            path.write_bytes(b"".join(lines[:-1]) + canonical(event) + b"\n")
             with self.assertRaises(IntegrityError):
                 Journal(directory).recover()
 
@@ -29,12 +30,13 @@ class CommandHashIntegrityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             Journal(directory).append("k", "open", {"task": "A"})
             path = Path(directory) / "events.jsonl"
-            event = json.loads(path.read_bytes())
+            lines = path.read_bytes().splitlines(keepends=True)
+            event = json.loads(lines[-1])
             event["command"] = ["not", "a", "mapping"]
             event["command_hash"] = digest(event["command"])
             event.pop("event_hash")
             event["event_hash"] = digest(event)
-            path.write_bytes(canonical(event) + b"\n")
+            path.write_bytes(b"".join(lines[:-1]) + canonical(event) + b"\n")
             with self.assertRaises(IntegrityError):
                 Journal(directory).recover()
 
