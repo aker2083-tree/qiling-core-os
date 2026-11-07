@@ -202,6 +202,11 @@ class Journal:
                     "decision_id": payload.get("decision_id") or cmd.get("idempotency_key"),
                     "summary": payload.get("summary"),
                     "source_ref": ref,
+                    "source_event_seq": event.get("seq"),
+                    "source_event_hash": event.get("event_hash"),
+                    "actor_claim": cmd.get("actor_claim"),
+                    "verification_status": "unverified",
+                    "authority": None,
                 })
             elif kind == "observation":
                 if payload.get("result_reference"):
@@ -210,6 +215,7 @@ class Journal:
         open_list = [t for t in open_tasks.values() if t.get("status") != "done"]
         return {
             "journal_id": journal_id,
+            "charter_verified": False,  # No authenticated charter approval mechanism exists yet.
             "open_tasks": open_list,
             "last_decisions": decisions[-5:],
             "blocked": blocked,
