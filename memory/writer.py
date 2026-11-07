@@ -162,14 +162,16 @@ class Journal:
         Returns a deterministic summary from the event log only.
         Platform memory is not consulted. actor_claim is recorded, not trusted.
         """
-        events = self.recover()
+        with self.lock.open("a+b") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_SH)
+            events = self._load()[0]
+            journal_id = None
+            if self.manifest.exists():
+                journal_id = json.loads(self.manifest.read_bytes())["journal_id"]
         open_tasks = {}
         decisions = []
-        blocked = []
+        blockers = {}
         evidence_refs = []
-        journal_id = None
-        if self.manifest.exists():
-            journal_id = json.loads(self.manifest.read_bytes()).get("journal_id")
 
         for event in events:
             cmd = event.get("command") or {}
@@ -178,6 +180,7 @@ class Journal:
             ref = cmd.get("source_ref") or ""
             if kind == "task_opened":
                 tid = payload.get("task_id") or cmd.get("idempotency_key")
+                blockers.pop(tid, None)
                 open_tasks[tid] = {
                     "task_id": tid,
                     "goal": payload.get("goal"),
@@ -191,10 +194,13 @@ class Journal:
                     if "status" in payload:
                         open_tasks[tid]["status"] = payload["status"]
                     if payload.get("status") == "blocked":
-                        blocked.append({"task_id": tid, "reason": payload.get("reason")})
+                        blockers[tid] = {"task_id": tid, "reason": payload.get("reason")}
+                    elif "status" in payload:
+                        blockers.pop(tid, None)
             elif kind == "task_closed":
                 tid = payload.get("task_id")
                 open_tasks.pop(tid, None)
+                blockers.pop(tid, None)
                 if payload.get("result_reference"):
                     evidence_refs.append(payload["result_reference"])
             elif kind == "decision_confirmed":
@@ -212,7 +218,7 @@ class Journal:
             "journal_id": journal_id,
             "open_tasks": open_list,
             "last_decisions": decisions[-5:],
-            "blocked": blocked,
+            "blocked": [blockers[t] for t in open_tasks if t in blockers],
             "evidence_refs": evidence_refs[-10:],
             "event_count": len(events),
         }
