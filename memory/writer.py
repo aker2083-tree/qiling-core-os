@@ -159,13 +159,25 @@ class Journal:
     def summarize_for_agents(self):
         """Project shared state for dual-agent bootstrap (SENJU-CORE-DIRECTIVE-001).
 
-        Returns a deterministic summary from the event log only.
+        Deterministic read-model from the event log only.
         Platform memory is not consulted. actor_claim is recorded, not trusted.
+
+        Projection semantics (V0.2):
+        - identity_refs: latest charter/governance anchors (by doc key)
+        - open_tasks / completed_tasks / blocked
+        - decisions_proposed vs decisions_confirmed (proposed is not approved)
+        - disagreements: unresolved disputes with reasons/evidence
+        - evidence_refs: recent result references
+        - schema_version of this projection document
         """
         events = self.recover()
         open_tasks = {}
-        decisions = []
-        blocked = []
+        completed_tasks = []
+        blocked_map = {}
+        identity_refs = {}
+        decisions_confirmed = []
+        decisions_proposed = []
+        disagreements = {}
         evidence_refs = []
         journal_id = None
         if self.manifest.exists():
@@ -174,45 +186,113 @@ class Journal:
         for event in events:
             cmd = event.get("command") or {}
             kind = cmd.get("kind")
-            payload = cmd.get("payload") or {}
+            payload = cmd.get("payload") if isinstance(cmd.get("payload"), dict) else {}
             ref = cmd.get("source_ref") or ""
-            if kind == "task_opened":
+            actor = cmd.get("actor_claim") or ""
+
+            if kind == "identity_ref":
+                doc = payload.get("doc") or cmd.get("idempotency_key")
+                identity_refs[doc] = {
+                    "doc": doc,
+                    "title": payload.get("title"),
+                    "note": payload.get("note"),
+                    "source_ref": ref,
+                    "actor_claim": actor,
+                }
+            elif kind == "task_opened":
                 tid = payload.get("task_id") or cmd.get("idempotency_key")
                 open_tasks[tid] = {
                     "task_id": tid,
                     "goal": payload.get("goal"),
-                    "status": payload.get("status", "open"),
-                    "risk_level": payload.get("risk_level", "low"),
+                    "status": payload.get("status") or "open",
+                    "risk_level": payload.get("risk_level") or "low",
                     "acceptance": payload.get("acceptance"),
+                    "priority": payload.get("priority"),
                 }
             elif kind == "task_updated":
                 tid = payload.get("task_id")
                 if tid in open_tasks:
                     if "status" in payload:
                         open_tasks[tid]["status"] = payload["status"]
+                    for field in ("goal", "risk_level", "acceptance", "priority"):
+                        if field in payload:
+                            open_tasks[tid][field] = payload[field]
                     if payload.get("status") == "blocked":
-                        blocked.append({"task_id": tid, "reason": payload.get("reason")})
+                        blocked_map[tid] = {
+                            "task_id": tid,
+                            "reason": payload.get("reason"),
+                            "source_ref": ref,
+                        }
+                    elif tid in blocked_map and payload.get("status") in (
+                        "open", "in_progress", "done"
+                    ):
+                        blocked_map.pop(tid, None)
             elif kind == "task_closed":
                 tid = payload.get("task_id")
-                open_tasks.pop(tid, None)
+                prior = open_tasks.pop(tid, {"task_id": tid})
+                blocked_map.pop(tid, None)
+                completed_tasks.append({
+                    "task_id": tid,
+                    "goal": prior.get("goal") or payload.get("goal"),
+                    "result_reference": payload.get("result_reference"),
+                    "source_ref": ref,
+                })
                 if payload.get("result_reference"):
                     evidence_refs.append(payload["result_reference"])
             elif kind == "decision_confirmed":
-                decisions.append({
+                decisions_confirmed.append({
                     "decision_id": payload.get("decision_id") or cmd.get("idempotency_key"),
                     "summary": payload.get("summary"),
                     "source_ref": ref,
+                    "actor_claim": actor,
                 })
+            elif kind == "decision_proposed":
+                decisions_proposed.append({
+                    "decision_id": payload.get("decision_id") or cmd.get("idempotency_key"),
+                    "summary": payload.get("summary"),
+                    "source_ref": ref,
+                    "actor_claim": actor,
+                    "status": "proposed",
+                })
+            elif kind == "disagreement":
+                did = payload.get("disagreement_id") or cmd.get("idempotency_key")
+                disagreements[did] = {
+                    "disagreement_id": did,
+                    "topic": payload.get("topic"),
+                    "positions": payload.get("positions") or {},
+                    "reason": payload.get("reason"),
+                    "evidence_refs": payload.get("evidence_refs") or [],
+                    "status": payload.get("status") or "open",
+                    "source_ref": ref,
+                }
+            elif kind == "disagreement_resolved":
+                did = payload.get("disagreement_id") or cmd.get("idempotency_key")
+                if did in disagreements:
+                    disagreements[did]["status"] = "resolved"
+                    disagreements[did]["resolution"] = payload.get("resolution")
             elif kind == "observation":
                 if payload.get("result_reference"):
                     evidence_refs.append(payload["result_reference"])
 
-        open_list = [t for t in open_tasks.values() if t.get("status") != "done"]
+        open_list = [
+            t for t in open_tasks.values()
+            if t.get("status") not in ("done", "closed")
+        ]
+        open_disagreements = [
+            d for d in disagreements.values() if d.get("status") != "resolved"
+        ]
         return {
+            "projection_schema_version": 2,
             "journal_id": journal_id,
+            "identity_refs": list(identity_refs.values()),
             "open_tasks": open_list,
-            "last_decisions": decisions[-5:],
-            "blocked": blocked,
-            "evidence_refs": evidence_refs[-10:],
+            "completed_tasks": completed_tasks[-20:],
+            "blocked": list(blocked_map.values()),
+            "decisions_confirmed": decisions_confirmed[-10:],
+            "decisions_proposed": decisions_proposed[-10:],
+            "disagreements_open": open_disagreements,
+            "evidence_refs": evidence_refs[-20:],
             "event_count": len(events),
+            # backward-compatible aliases for OPENING_PROTOCOL V0.1 readers
+            "last_decisions": decisions_confirmed[-5:],
         }
